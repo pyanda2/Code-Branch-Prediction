@@ -19,29 +19,27 @@ VALID_FILE_EXTS = (
     ".hxx",
     ".h++",
 )
-def find_end_of_if(lines: list, i: int) -> int:
+def find_start_of_function(lines: list, i: int) -> int:
     '''
-    Starting at an "if" statement, finds its ending bracket.
-    @param lines: list of lines in the file
-    @param i: index of '{' after the "if" statement
-
-    NOTE: Function assumes every '{' has a matching '}'. WILL FAIL ON EDGE CASE WHEN SINGLE, UNMATCHED BRACKET EXISTS
+    Starting at an "if"' statement, finds the start of the outermost function it is located in (no indent).
+    @param lines: list of lines in the c file
+    @param i: ndex of the '{' after the "if" statement
     '''
-    assert(lines[i].lstrip().startswith("{"))
 
-    net_l_brack_count = 1 
-    while net_l_brack_count > 0:
-        if i == len(lines) - 1:
-            raise Exception("Unmatched '{' bracket(s), incorrect C++ code or smth went wrong")
-        i += 1 
-        l_brack_count = lines[i].count("{")
-        r_brack_count = lines[i].count("}")
+    # 1) iterate over upward lines, detect line with no indent
+    # (optional, may cause issues) 2) check "assert(lines[i].lstrip().startswith("{"))"
+    # 3) iterate upwards until find empty line (should be 1-4 lines, maybe set hard stop)
+    while len(lines[i]) > len(lines[i].lstrip()):
+        i -= 1
+    # no indent (start of function, ideally) found
+    # assert(lines[i].startswith("{"))
 
-        net_l_brack_count += l_brack_count - r_brack_count
-
-    # if net_l_brack_count < 0:
-    #     raise Exception("Unmatched '}' bracket(s), incorrect C++ code or smth went wrong")
-    return i # net_l_brack_count == 0
+    # limit to 5 lines
+    count = 0
+    while bool(lines[i].strip()) and count <= 5: # while string not empty and less than 5 iterations
+        i -= 1
+        count += 1 
+    return i
 
 def end_of_if(indent: int, lines: list, i: int):
     while i < len(lines):
@@ -51,6 +49,8 @@ def end_of_if(indent: int, lines: list, i: int):
             return i
         i += 1
     return i
+
+
 
 def add_example(dataset, example):
     code = "".join(example)
@@ -69,9 +69,6 @@ def add_examples(dataset, path):
             if cond_expression:
                 if code.startswith("{"):
                     if_end_idx = end_of_if(indent, lines, i)
-                    # example.append((indent * " ") + "{}\n")
-                    # example.append((indent * " ") + "{}\n")
-                    # example.append(code + "")
                     example.extend(lines[i:if_end_idx+1]) # should contain if body
                     cond_expression = False
                     add_example(dataset, example)
@@ -82,7 +79,9 @@ def add_examples(dataset, path):
                 if (code.startswith("if ") or code == "if"):
                     do_control = random.randrange(10) == 0
                     if "[[likely]]" in code or "[[unlikely]]" in code or do_control:
-                        example.extend(lines[i-50:i])
+                        func_start_idx = find_start_of_function(lines, i)
+                        # example.extend(lines[i-50:i])
+                        example.extend(lines[func_start_idx:i])
                         if (lines[i][-1] == "\n"): # appending sentinel before newline
                             example.append(lines[i][:-1] + " // SENTINEL"+ "\n")
                         else: 
@@ -98,7 +97,8 @@ def add_examples(dataset, path):
 
 
 if __name__ == "__main__":
-    with open("ORIG/urls_original.txt", "r") as f:
+    random.seed(10)
+    with open("urls.txt", "r") as f:
         data = []
         tag_total = 0
         control_total = 0
@@ -122,7 +122,14 @@ if __name__ == "__main__":
                     os.remove("file.cc")
                     os.remove("file2.cc")
 
-        df = pandas.DataFrame(data, columns=["code"])
-        print(df)
 
-        df.to_parquet("dataset.parquet")
+        split_idx = int(0.9*len(data))
+
+        data_train = data[:split_idx]
+        data_test = data[split_idx:]
+
+        df_train = pandas.DataFrame(data_train, columns=["code"]) 
+        df_test = pandas.DataFrame(data_test, columns=["code"]) 
+
+        df_train.to_parquet("dataset_train.parquet")
+        df_test.to_parquet("dataset_test.parquet")
