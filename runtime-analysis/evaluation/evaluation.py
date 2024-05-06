@@ -1,6 +1,7 @@
 import os
-import time
+import subprocess
 import sys
+import time
 
 PATH = ""
 dirs = os.path.realpath(__file__).split("/")
@@ -28,27 +29,28 @@ def run_project(path, running_times, runs=1):
     path_elems = path.split("/")
     project_name = path_elems[-1]
     type = path_elems[-2]
-    images = ["ocean", "forest", "mountain"]
+    images = ["ocean", "mountain"]
+    # images = ["ocean", "forest", "mountain"]
     # Run run times
+
+    os.system("make clean")
+    os.system("make exec")
+
     for image in images:
         for run in range(runs):
-            os.system("make clean")
-            os.system("make exec")
-            curr_time = time.time()
-            os.system(
-                f"./bin/exec images/{image}.ppm -v 120 -h 120 -o {image}_carved.ppm"
-            )
-            end_time = time.time()
 
-            if f"{project_name}_{image}" in running_times:
-                running_times[f"{project_name}_{image}"][type == "groundtruths"].append(
-                    (end_time - curr_time)
-                )
-            else:
+            command = f"./bin/exec images/{image}.ppm -v 4 -h 4 -o {image}_carved.ppm"
+            env = os.environ.copy()
+            env["TIMEFORMAT"] = "%3U"
+            result = subprocess.run(["/bin/bash", "-c", f"time {command}"], env=env, stderr=subprocess.PIPE).stderr
+
+            if not f"{project_name}_{image}" in running_times:
                 running_times[f"{project_name}_{image}"] = [[], 0]
-                running_times[f"{project_name}_{image}"][type == "groundtruths"].append(
-                    end_time - curr_time
-                )
+
+            # utime = result.split()[0].decode("utf-8")
+            # cycles = int(result.decode("utf-8").split("\n")[16].split()[0])
+            utime = float(result.decode("utf-8").split()[0])
+            running_times[f"{project_name}_{image}"][type == "groundtruths"].append(utime)
 
         # Compute Average
         # running_times[f"{project_name}_{image}"][type == "groundtruths"] /= runs
